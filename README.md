@@ -1,3 +1,54 @@
+#Connect master and slave in jenkins
+Jenkins can SSH using a .pem key instead of a generated SSH key.
+
+Step-by-step:
+Go to Jenkins master
+(You said mumbai.pem is already present there.)
+
+Test manual SSH from Jenkins machine:
+
+#sudo -u jenkins ssh -i /home/ubuntu/mumbai.pem ubuntu@3.110.42.241
+If that gives an error like "Permission denied", then Jenkins doesn't have access to mumbai.pem.
+
+Fix file permission and access:
+
+#sudo mkdir -p /var/lib/jenkins/.ssh
+#sudo cp /home/ubuntu/mumbai.pem /var/lib/jenkins/.ssh/mumbai.pem
+#sudo chown -R jenkins:jenkins /var/lib/jenkins/.ssh
+#sudo chmod 400 /var/lib/jenkins/.ssh/mumbai.pem
+Test again as Jenkins user:
+
+#sudo -u jenkins ssh -i /var/lib/jenkins/.ssh/mumbai.pem ubuntu@3.110.42.241
+✅ If this connects: you're good to add this key in Jenkins.
+
+✅ Option 2: Manually add Jenkins public key to slave
+If you want to use ssh-copy-id or Jenkins's own key, follow these:
+
+Step-by-step:
+On Jenkins master, view the public key:
+
+#sudo cat /var/lib/jenkins/.ssh/id_ed25519.pub
+Copy that key.
+
+SSH into the slave manually using your .pem (from master or local):
+#ssh -i mumbai.pem ubuntu@3.110.42.241
+On the slave:
+#mkdir -p ~/.ssh
+#nano ~/.ssh/authorized_keys
+#Set permissions:
+#chmod 700 ~/.ssh
+#chmod 600 ~/.ssh/authorized_keys
+#sudo -u jenkins ssh ubuntu@3.110.42.241
+✅ If it works — Jenkins can connect via SSH key.
+
+
+
+
+
+
+
+
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
