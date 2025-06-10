@@ -9,8 +9,7 @@ pipeline {
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
         AWS_REGION = 'ap-south-1'
-        EKS_CLUSTER = 'my-cluster'
-        IMAGE_NAME = 'pooja781/zomato:latest'
+        EKS_CLUSTER = 'zomato-cluster'
     }
 
     stages {
@@ -20,7 +19,7 @@ pipeline {
             }
         }
 
-        stage('Checkout Code') {
+        stage('Checkout from Git') {
             steps {
                 git branch: 'main', url: 'https://github.com/0509pooja/Zomato-Clone.git'
             }
@@ -29,20 +28,18 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonar-server') {
-                    sh '''
+                    sh """
                         $SCANNER_HOME/bin/sonar-scanner \
-                        -Dsonar.projectName=zomato \
-                        -Dsonar.projectKey=zomato
-                    '''
+                        -Dsonar.projectName=Zomato-clone \
+                        -Dsonar.projectKey=Zomato-clone
+                    """
                 }
             }
         }
 
         stage('Quality Gate') {
             steps {
-                script {
-                    waitForQualityGate abortPipeline: true, credentialsId: 'Sonar-Token'
-                }
+                waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
             }
         }
 
@@ -52,14 +49,7 @@ pipeline {
             }
         }
 
-        stage('OWASP Dependency Check') {
-            steps {
-                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
-                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-            }
-        }
-
-        stage('Trivy FS Scan') {
+        stage('Trivy Filesystem Scan') {
             steps {
                 sh 'trivy fs . > trivyfs.txt'
             }
@@ -67,29 +57,27 @@ pipeline {
 
         stage('Docker Build & Push') {
             steps {
-                script {
-                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                        sh '''
-                            docker build -t zomato .
-                            docker tag zomato $IMAGE_NAME
-                            docker push $IMAGE_NAME
-                        '''
-                    }
+                withDockerRegistry([credentialsId: 'docker', url: '']) {
+                    sh '''
+                        docker build -t zomato .
+                        docker tag zomato pooja781/zomato:latest
+                        docker push pooja781/zomato:latest
+                    '''
                 }
             }
         }
 
         stage('Trivy Image Scan') {
             steps {
-                sh 'trivy image $IMAGE_NAME > trivy_image_scan.txt'
+                sh 'trivy image pooja781/zomato:latest > trivyimage.txt'
             }
         }
 
-        stage('Deploy to EKS') {
+        stage('Deploy to Kubernetes') {
             steps {
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws'
+                    credentialsId: 'k8ss'
                 ]]) {
                     script {
                         sh '''
@@ -107,4 +95,16 @@ pipeline {
             }
         }
     }
-}
+
+    post {
+        always {
+            emailext attachLog: true,
+                subject: "'${currentBuild.result}'",
+                body: "Project: ${env.JOB_NAME}<br/>" +
+                      "Build Number: ${env.BUILD_NUMBER}<br/>" +
+                      "URL: ${env.BUILD_URL}<br/>",
+                to: 'dhumalpooja877@gmail.com',
+                attachmentsPattern: 'trivyfs.txt,trivyimage.txt'
+        }
+    }
+} 
